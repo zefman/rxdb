@@ -4,8 +4,10 @@ import type {
 } from './types/rx-query';
 import {
     SortComparator,
-    QueryMatcher
+    QueryMatcher,
+    ChangeEvent
 } from 'event-reduce-js';
+import { Observable } from 'rxjs';
 
 
 export type PreparedQuery<DocType> = MangoQuery<DocType> | any;
@@ -71,7 +73,6 @@ export interface RxStorage<RxStorageInstance = any> {
         options?: any
     ): RxStorageInstance;
 
-
     /**
      * creates the internal storage instance
      * which is used by the RxDatabase to store metadata
@@ -81,5 +82,13 @@ export interface RxStorage<RxStorageInstance = any> {
         databaseName: string,
         options?: any
     ): Promise<RxStorageInstance>;
+
+    /**
+     * returns a stream of all write events that happen to the instance
+     */
+    getEvents(
+        instance: RxStorageInstance,
+        primaryKey: string
+    ): Observable<ChangeEvent<any>>;
 
 }

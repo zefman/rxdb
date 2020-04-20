@@ -67,7 +67,7 @@ function _handleSingleChange(
 
     const eventTime = now();
     // wait 2 ticks and 20 ms to give the internal event-handling time to run
-    return promiseWait(20)
+    return promiseWait(50)
         .then(() => nextTick())
         .then(() => nextTick())
         .then(() => {

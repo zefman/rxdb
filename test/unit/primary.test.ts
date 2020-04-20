@@ -274,12 +274,20 @@ config.parallel('primary.test.js', () => {
                     c.database.destroy();
                 });
                 it('subscribe to query', async () => {
+
+                    console.log('..............');
                     const c = await humansCollection.createPrimary(0);
                     let docs: any[];
                     const sub = c.find().$.subscribe(newDocs => {
+                        console.log('got ev!');
+                        console.dir(newDocs.map(d => d.toJSON()));
                         docs = newDocs;
                     });
-                    await c.insert(schemaObjects.simpleHuman());
+
+                    const insertData = schemaObjects.simpleHuman();
+                    console.log('insertData:');
+                    console.dir(insertData);
+                    await c.insert(insertData);
                     await AsyncTestUtil.waitUntil(() => docs && docs.length === 1);
                     sub.unsubscribe();
                     c.database.destroy();

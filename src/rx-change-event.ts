@@ -5,7 +5,8 @@
 
 import {
     WriteOperation,
-    ChangeEvent as EventReduceChangeEvent
+    ChangeEvent as EventReduceChangeEvent,
+    ChangeEvent
 } from 'event-reduce-js';
 
 import type {
@@ -13,6 +14,7 @@ import type {
     RxDocument,
     RxDocumentTypeWithRev
 } from './types';
+import { now } from './util';
 
 export type RxChangeEventJson<DocType = any> = {
     operation: WriteOperation;
@@ -48,8 +50,7 @@ export class RxChangeEvent<DocType = any> {
          */
         public startTime?: number,
         public endTime?: number,
-        public readonly previousData?: DocType | null,
-        public readonly rxDocument?: RxDocument<DocType>
+        public readonly previousData?: DocType | null
     ) { }
 
     isIntern(): boolean {
@@ -115,20 +116,59 @@ export interface RxChangeEventDelete<DocType = any> extends RxChangeEvent<DocTyp
     operation: 'DELETE';
 }
 
+export function changeEventFromStorageStream<DocType>(
+    change: ChangeEvent<DocType>,
+    collection: RxCollection
+) {
+
+    console.log('changeEventFromStorageStream()');
+    console.dir(change);
+
+    const operation = change.operation;
+
+    const doc: RxDocumentTypeWithRev<DocType> = change.doc ? collection._handleFromPouch(change.doc) : null;
+    const previous: RxDocumentTypeWithRev<DocType> = change.previous ? collection._handleFromPouch(change.previous) : null;
+
+    const documentId = change.id;
+
+    const ret = new RxChangeEvent<DocType>(
+        operation,
+        documentId,
+        doc,
+        collection.database.token,
+        collection.name,
+        false,
+        now(),
+        now(),
+        previous
+    );
+
+    console.log('changeEventFromStorageStream(): ret');
+    console.dir(ret);
+
+    return ret;
+}
 
 export function changeEventfromPouchChange<DocType>(
     changeDoc: any,
     collection: RxCollection,
     time: number // time when the event was streamed out of pouchdb
 ): RxChangeEvent<DocType> {
+    console.log('!!changeEventfromPouchChange()');
     let operation: WriteOperation = changeDoc._rev.startsWith('1-') ? 'INSERT' : 'UPDATE';
     if (changeDoc._deleted) {
         operation = 'DELETE';
     }
 
     // decompress / primarySwap
-    const doc: RxDocumentTypeWithRev<DocType> = collection._handleFromPouch(changeDoc);
+    let doc: RxDocumentTypeWithRev<DocType> | null = collection._handleFromPouch(changeDoc);
     const documentId: string = (doc as any)[collection.schema.primaryPath] as string;
+
+    let previous = null;
+    if (operation === 'DELETE') {
+        previous = doc;
+        doc = null;
+    }
 
     const cE = new RxChangeEvent<DocType>(
         operation,
@@ -138,7 +178,8 @@ export function changeEventfromPouchChange<DocType>(
         collection.name,
         false,
         time,
-        time
+        time,
+        previous
     );
     return cE;
 }
@@ -148,8 +189,7 @@ export function createInsertEvent<RxDocumentType>(
     collection: RxCollection<RxDocumentType>,
     docData: RxDocumentTypeWithRev<RxDocumentType>,
     startTime: number,
-    endTime: number,
-    doc?: RxDocument<RxDocumentType>
+    endTime: number
 ): RxChangeEvent<RxDocumentType> {
     const ret = new RxChangeEvent<RxDocumentType>(
         'INSERT',
@@ -160,8 +200,7 @@ export function createInsertEvent<RxDocumentType>(
         false,
         startTime,
         endTime,
-        null,
-        doc
+        null
     );
     return ret;
 
@@ -172,8 +211,7 @@ export function createUpdateEvent<RxDocumentType>(
     docData: RxDocumentTypeWithRev<RxDocumentType>,
     previous: RxDocumentType,
     startTime: number,
-    endTime: number,
-    rxDocument: RxDocument<RxDocumentType>
+    endTime: number
 ): RxChangeEvent<RxDocumentType> {
     return new RxChangeEvent<RxDocumentType>(
         'UPDATE',
@@ -184,8 +222,7 @@ export function createUpdateEvent<RxDocumentType>(
         false,
         startTime,
         endTime,
-        previous,
-        rxDocument
+        previous
     );
 }
 
@@ -195,7 +232,6 @@ export function createDeleteEvent<RxDocumentType>(
     previous: RxDocumentType,
     startTime: number,
     endTime: number,
-    rxDocument: RxDocument<RxDocumentType>
 ): RxChangeEvent<RxDocumentType> {
     return new RxChangeEvent<RxDocumentType>(
         'DELETE',
@@ -206,8 +242,7 @@ export function createDeleteEvent<RxDocumentType>(
         false,
         startTime,
         endTime,
-        previous,
-        rxDocument
+        previous
     );
 }
 

@@ -1,5 +1,5 @@
 import {
-    filter
+    filter, tap, map
 } from 'rxjs/operators';
 
 import {
@@ -32,7 +32,8 @@ import {
     createInsertEvent,
     RxChangeEventInsert,
     RxChangeEventUpdate,
-    RxChangeEventDelete
+    RxChangeEventDelete,
+    changeEventFromStorageStream
 } from './rx-change-event';
 import {
     newRxError,
@@ -214,10 +215,53 @@ export class RxCollectionBase<
 
         this._crypter = createCrypter(this.database.password, this.schema);
 
+
         this._observable$ = this.database.$.pipe(
-            filter(event => (event as any).collectionName === this.name)
+            filter(event => (event as any).collectionName === this.name),
+            tap(ev => {
+                // console.log('event old:');
+                // console.dir(ev);
+            })
         );
+
+        const eventStreamSub = this.database.storage
+            .getEvents(this.pouch, this.schema.primaryPath)
+            .pipe(
+                map(cE => changeEventFromStorageStream(cE, this as any))
+            )
+            .subscribe(
+                cE => {
+                    console.log('got event:');
+                    console.dir(cE);
+                    this.database.$emit(cE);
+                }
+            );
+        this._subs.push(eventStreamSub);
+
+        /*         this._observable$ = this.database.storage
+                    .getEvents(this.pouch, this.schema.primaryPath)
+                    .pipe(
+                        map(cE => changeEventFromStorageStream(cE, this as any)),
+                        tap(cE => this.database.$emit(cE))
+                    );*/
+
+
+
         this._changeEventBuffer = createChangeEventBuffer(this.asRxCollection);
+
+        // experimental
+        /*        const eventStreamSub = this.database.storage
+                    .getEvents(this.pouch, this.schema.primaryPath)
+                    .pipe(
+                        map(cE => changeEventFromStorageStream(cE, this as any))
+                    )
+                    .subscribe(
+                        ev => {
+                            console.log('event:');
+                            console.dir(ev);
+                        }
+                    );
+                this._subs.push(eventStreamSub);*/
 
         this._subs.push(
             this._observable$
@@ -333,7 +377,7 @@ export class RxCollectionBase<
     }
 
     $emit(changeEvent: RxChangeEvent) {
-        return this.database.$emit(changeEvent);
+        // return this.database.$emit(changeEvent);
     }
 
     insert(
@@ -377,8 +421,7 @@ export class RxCollectionBase<
                     this as any,
                     useJson,
                     startTime,
-                    endTime,
-                    newDoc as any
+                    endTime
                 );
                 this.$emit(emitEvent);
                 return newDoc as any;
@@ -432,8 +475,7 @@ export class RxCollectionBase<
                                     this as any,
                                     doc.toJSON(true),
                                     startTime,
-                                    endTime,
-                                    docsMap.get(doc.primary)
+                                    endTime
                                 );
                                 this.$emit(emitEvent);
                             });

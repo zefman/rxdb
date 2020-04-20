@@ -13,16 +13,24 @@ import type {
     MangoQuerySortDirection
 } from './types';
 import { CompareFunction } from 'array-push-at-sort-position';
-import { flatClone, adapterObject } from './util';
-import { SortComparator, QueryMatcher } from 'event-reduce-js';
+import { flatClone, adapterObject, getHeightOfRevision, nextTick } from './util';
+import { SortComparator, QueryMatcher, ChangeEvent } from 'event-reduce-js';
 import { runPluginHooks } from './hooks';
 import {
     PouchDB
 } from './pouch-db';
 import { newRxError } from './rx-error';
+import { Observable, Subject } from 'rxjs';
+import { shareReplay } from 'rxjs/operators';
+import { wait } from 'async-test-util';
 
 export class RxStoragePouchDbClass implements RxStorage<PouchDBInstance> {
     public name: string = 'pouchdb';
+
+    private eventStreamCache: WeakMap<PouchDBInstance, {
+        stream: Observable<ChangeEvent<any>>;
+        primaryKey: string;
+    }> = new WeakMap();
 
     constructor(
         public adapter: any, // TODO are there types for pouchdb adapters?
@@ -253,6 +261,250 @@ export class RxStoragePouchDbClass implements RxStorage<PouchDBInstance> {
 
         return query;
     }
+
+    getEvents(
+        instance: PouchDBInstance,
+        primaryKey: string
+    ): Observable<ChangeEvent<any>> {
+        if (!this.eventStreamCache.has(instance)) {
+            const subject: Subject<ChangeEvent<any>> = new Subject();
+            const oldBulkDocs = instance.bulkDocs.bind(instance);
+
+            /**
+             * overwrite the bulkDocs function
+             * like described here
+             * @link http://jsbin.com/pagebi/1/edit?js,output
+             */
+            (instance as any).bulkDocs = async function (
+                this: PouchDBInstance,
+                body: any[] | { docs: any[], new_edits?: boolean },
+                options?: any,
+                callback?: Function
+            ) {
+
+                // we need to await 2 ticks here,
+                // to prevent a race condition when write+read occurs at the same time
+                await nextTick();
+                await nextTick();
+
+                /*
+                console.log('bulk docs input:');
+                console.log(JSON.stringify(body, null, 4));
+                console.dir(options);
+                console.dir(callback);
+                console.dir(other);
+                console.log('------------------');*/
+
+                // normalize input
+                if (typeof options === 'function') {
+                    callback = options;
+                    options = {};
+                }
+                let docs: any[];
+                if (Array.isArray(body)) {
+                    docs = body;
+                } else if (body === undefined) {
+                    docs = [];
+                } else {
+                    docs = body.docs;
+                }
+
+
+                // used in internal calls, can update a documents via older revision
+                // which does not affect anything
+                const noNewEdit = (!!options && options.new_edits === false) || (body as any).new_edits === false;
+
+
+                if (typeof (body as any).new_edits !== 'undefined') {
+                    delete options.new_edits;
+                }
+
+                /*
+                console.log('bulk docs input normalized:');
+                console.log(JSON.stringify(docs, null, 4));
+                console.dir(options);
+                console.dir(callback);
+                console.dir(other);
+                console.dir(body);
+                console.log('------------------');*/
+
+                // if no new edit is used, we need the previous last winning rev of each document
+                const previousDocsById = new Map();
+                if (noNewEdit) {
+                    const previousDocs = await this.allDocs({
+                        keys: docs.map(doc => doc._id),
+                        include_docs: true
+                    });
+                    previousDocs.rows.forEach((row: any) => {
+                        if (!row.error) {
+                            previousDocsById.set(row.key, row.doc);
+                        }
+                    });
+                }
+
+                let result: any[] = [];
+                try {
+                    result = await new Promise((res, rej) => {
+                        (oldBulkDocs as any).call(this, body, options, (err: any, res2: any) => {
+                            if (err) {
+                                rej(err);
+                            } else {
+                                res(res2);
+                            }
+                        });
+                    });
+                } catch (err) {
+                    if (typeof callback === 'function') {
+                        callback(err, undefined);
+                        return;
+                    } else {
+                        throw err;
+                    }
+                }
+
+
+                if (noNewEdit) {
+                    docs.forEach(doc => {
+                        const id = doc._id;
+
+                        if (id.startsWith('_design/')) {
+                            return;
+                        }
+
+                        const prevDoc = previousDocsById.get(id);
+                        let event: ChangeEvent<any>;
+
+                        let isNewRevisionHighter = false;
+                        if (
+                            !prevDoc ||
+                            getHeightOfRevision(doc._rev) >
+                            getHeightOfRevision(prevDoc._rev)
+                        ) {
+                            isNewRevisionHighter = true;
+                        }
+
+                        console.log('isNewRevisionHighter: ' + isNewRevisionHighter);
+
+                        if (!isNewRevisionHighter) {
+                            return;
+                        }
+
+                        if (!prevDoc) {
+                            if (doc._deleted) {
+                                return;
+                            }
+                            event = {
+                                id,
+                                operation: 'INSERT',
+                                doc: cleanDoc(doc),
+                                previous: null
+                            };
+                        } else if (
+                            doc._deleted
+                        ) {
+                            event = {
+                                id,
+                                operation: 'DELETE',
+                                doc: null,
+                                previous: cleanDoc(doc)
+                            };
+                        } else {
+                            if (prevDoc._deleted) {
+                                event = {
+                                    id,
+                                    operation: 'INSERT',
+                                    doc: cleanDoc(doc),
+                                    previous: null
+                                };
+                            } else {
+                                event = {
+                                    id,
+                                    operation: 'UPDATE',
+                                    doc: cleanDoc(doc),
+                                    previous: cleanDoc(prevDoc)
+                                };
+                            }
+                        }
+
+                        subject.next(event);
+                    });
+                } else {
+                    const inputDocsById = new Map();
+                    docs.forEach(doc => inputDocsById.set(doc._id, doc));
+                    result.forEach(res => {
+                        const id = res.id;
+
+                        if (id.startsWith('_design/')) {
+                            return;
+                        }
+
+                        if (!res.ok) { return; }
+                        const before = inputDocsById.get(id);
+                        const after = Object.assign({}, before);
+                        after._rev = res.rev;
+
+                        let event: ChangeEvent<any>;
+                        if (after._rev.startsWith('1-')) {
+                            event = {
+                                id,
+                                operation: 'INSERT',
+                                doc: cleanDoc(after),
+                                previous: null
+                            };
+                        } else if (after._deleted) {
+                            event = {
+                                id,
+                                operation: 'DELETE',
+                                doc: null,
+                                previous: cleanDoc(before)
+                            };
+                        } else {
+                            event = {
+                                id,
+                                operation: 'UPDATE',
+                                doc: cleanDoc(after),
+                                previous: cleanDoc(before)
+                            };
+                        }
+                        subject.next(event);
+                    });
+                }
+
+                // console.log('result!');
+                // console.dir(result);
+
+                if (typeof callback === 'function') {
+                    callback(undefined, result);
+                    return;
+                } else {
+                    return result;
+                }
+            };
+
+            this.eventStreamCache.set(instance, {
+                stream: subject.asObservable().pipe(
+                    shareReplay(1)
+                ),
+                primaryKey
+            });
+        }
+        const cached = this.eventStreamCache.get(instance);
+        if ((cached as any).primaryKey !== primaryKey) {
+            throw new Error('wrong primary key given');
+        }
+        return (cached as any).stream;
+    }
+}
+
+export function cleanDoc<T>(doc: T): T {
+    const cloned: any = Object.assign({}, doc);
+    delete cloned._revisions;
+
+    if (!cloned._deleted) {
+        delete cloned._deleted;
+    }
+
+    return cloned;
 }
 
 /**
