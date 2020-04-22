@@ -215,8 +215,7 @@ const RxLocalDocumentPrototype: any = {
                     true,
                     startTime,
                     endTime,
-                    oldData,
-                    this
+                    oldData
                 );
                 this.$emit(changeEvent);
             });
@@ -238,8 +237,7 @@ const RxLocalDocumentPrototype: any = {
                     true,
                     startTime,
                     endTime,
-                    null,
-                    this
+                    null
                 );
                 this.$emit(changeEvent);
             });

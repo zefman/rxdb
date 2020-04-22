@@ -36,7 +36,6 @@ function resyncRxDocument<RxDocType>(doc: any) {
             null,
             startTime,
             endTime,
-            doc
         );
         doc.$emit(changeEvent);
     });

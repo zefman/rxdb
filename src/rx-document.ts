@@ -334,8 +334,7 @@ export const basePrototype = {
                     newData,
                     oldData,
                     startTime,
-                    endTime,
-                    this
+                    endTime
                 );
                 this.$emit(changeEvent);
 
@@ -402,8 +401,7 @@ export const basePrototype = {
                         deletedData,
                         this._data,
                         startTime,
-                        endTime,
-                        this
+                        endTime
                     )
                 );
 
