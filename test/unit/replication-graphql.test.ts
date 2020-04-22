@@ -1541,8 +1541,10 @@ describe('replication-graphql.test.js', () => {
                     )
                 );
 
+                await AsyncTestUtil.waitUntil(
+                    () => replicationState._runQueueCount === 0
+                );
                 assert.ok(count < 10);
-                assert.strictEqual(replicationState._runQueueCount, 0);
 
                 server.close();
                 c.database.destroy();
@@ -1994,6 +1996,7 @@ describe('replication-graphql.test.js', () => {
                     live: true,
                     deletedFlag: 'deleted'
                 });
+
                 await replicationState.awaitInitialReplication();
 
                 // add one doc
@@ -2006,57 +2009,32 @@ describe('replication-graphql.test.js', () => {
                 assert.strictEqual(server.getDocuments().length, 1);
 
                 // update document
-                const newTime = Math.round(new Date().getTime() / 1000);
-                const doc = await collection.findOne().exec();
-                await doc.atomicSet('updatedAt', newTime);
+                const newAge = 1111;
+                const doc = await collection.findOne().exec(true);
+                await doc.atomicSet('age', newAge);
+
+                const docAfter = await collection.findOne().exec(true);
+                assert.strictEqual(docAfter.age, newAge);
 
                 // check server
                 await replicationState.run();
+
                 await AsyncTestUtil.waitUntil(() => {
-                    const notUpdated = server.getDocuments().find((d: any) => d.updatedAt !== newTime);
+                    const serverDocs = server.getDocuments();
+                    const notUpdated = serverDocs.find((d: any) => d.age !== newAge);
                     return !notUpdated;
                 });
 
                 // also delete to ensure nothing broke
                 await doc.remove();
                 await replicationState.run();
+
                 await AsyncTestUtil.waitUntil(() => {
                     const d = server.getDocuments().pop();
                     return (d as any).deleted;
                 });
-
                 server.close();
                 db.destroy();
-            });
-            it('#2048 GraphQL .run() fires exponentially', async () => {
-                const c = await humansCollection.createHumanWithTimestamp(0);
-                const server = await SpawnServer.spawn(getTestData(1));
-
-                const replicationState = c.syncGraphQL({
-                    url: server.url,
-                    pull: {
-                        queryBuilder
-                    },
-                    live: true,
-                    deletedFlag: 'deleted'
-                });
-                assert.strictEqual(replicationState._runCount, 0);
-
-                // call run() many times
-                const amount = 100;
-                await Promise.all(
-                    new Array(amount).map(
-                        () => replicationState.run()
-                    )
-                );
-
-                await AsyncTestUtil.waitUntil(
-                    () => replicationState._runCount > 0
-                );
-                await AsyncTestUtil.wait(50);
-                assert.ok(replicationState._runCount < amount);
-
-                c.database.destroy();
             });
         });
     });

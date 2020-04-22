@@ -98,9 +98,6 @@ export class RxGraphQLReplicationState {
     public _runningPromise: Promise<void> = Promise.resolve();
     public _subs: Subscription[] = [];
 
-    // counts how often the replication has run
-    // used in tests
-    public _runCount = 0;
     public _runQueueCount: number = 0;
 
     public initialReplicationComplete$: Observable<any> = undefined as any;
@@ -169,8 +166,6 @@ export class RxGraphQLReplicationState {
     }
 
     async _run() {
-        this._runCount = this._runCount + 1;
-
         let willRetry = false;
 
         if (this.push) {
@@ -190,7 +185,6 @@ export class RxGraphQLReplicationState {
         }
 
         return willRetry;
-
     }
 
     /**
@@ -376,12 +370,14 @@ export class RxGraphQLReplicationState {
             toPouch[this.lastPulledRevField] = toPouch._rev;
         }
 
+        const startTime = now();
         await this.collection.pouch.bulkDocs(
             [
                 toPouch
             ], {
             new_edits: false
         });
+        const endTime = now();
 
         /**
          * because bulkDocs with new_edits: false
@@ -402,7 +398,8 @@ export class RxGraphQLReplicationState {
         const cE = changeEventfromPouchChange(
             originalDoc,
             this.collection,
-            now()
+            startTime,
+            endTime
         );
         this.collection.$emit(cE);
     }
@@ -410,8 +407,6 @@ export class RxGraphQLReplicationState {
         if (this.isStopped()) return Promise.resolve(false);
         this._subs.forEach(sub => sub.unsubscribe());
         this._subjects.canceled.next(true);
-        // TODO
-
         return Promise.resolve(true);
     }
 }

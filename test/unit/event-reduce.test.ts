@@ -29,6 +29,10 @@ describe('event-reduce.test.js', () => {
     }
     function ensureResultsEqual(res1: RxDocument[], res2: RxDocument[]) {
         assert.deepStrictEqual(
+            res1.map(d => d.primary),
+            res2.map(d => d.primary)
+        );
+        assert.deepStrictEqual(
             res1.map(d => d.toJSON()),
             res2.map(d => d.toJSON())
         );
@@ -50,7 +54,12 @@ describe('event-reduce.test.js', () => {
                     age: {
                         $gt: 20
                     }
-                }
+                },
+                // TODO it should also work without the sorting
+                // because RxDB should add predicatble sort if primary not used in sorting
+                sort: [{
+                    passportId: 'asc'
+                }]
             }
 
         ];
@@ -59,7 +68,7 @@ describe('event-reduce.test.js', () => {
             await Promise.all(
                 queries.map(async (query) => {
                     const res1 = await colNoEventReduce.find(query).exec();
-                    const res2 = await colNoEventReduce.find(query).exec();
+                    const res2 = await colWithEventReduce.find(query).exec();
                     ensureResultsEqual(res1, res2);
                 })
             );
@@ -81,7 +90,7 @@ describe('event-reduce.test.js', () => {
         await testQueries();
 
         // update one
-        Promise.all(
+        await Promise.all(
             [
                 colNoEventReduce,
                 colWithEventReduce
@@ -97,7 +106,7 @@ describe('event-reduce.test.js', () => {
         await testQueries();
 
         // remove one
-        Promise.all(
+        await Promise.all(
             [
                 colNoEventReduce,
                 colWithEventReduce
@@ -110,6 +119,21 @@ describe('event-reduce.test.js', () => {
             })
         );
 
+        await testQueries();
+
+        // remove another one
+        await Promise.all(
+            [
+                colNoEventReduce,
+                colWithEventReduce
+            ].map(async (col) => {
+                const doc = await col
+                    .findOne()
+                    .sort('age')
+                    .exec(true);
+                await doc.remove();
+            })
+        );
         await testQueries();
 
         // clean up

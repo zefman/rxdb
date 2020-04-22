@@ -19,7 +19,7 @@ import { now } from './util';
 export type RxChangeEventJson<DocType = any> = {
     operation: WriteOperation;
     documentId: string;
-    documentData: RxDocumentTypeWithRev<DocType>;
+    documentData: RxDocumentTypeWithRev<DocType> | null;
     previousData?: DocType;
     databaseToken: string;
     collectionName: string;
@@ -38,7 +38,7 @@ export class RxChangeEvent<DocType = any> {
     constructor(
         public readonly operation: WriteOperation,
         public readonly documentId: string,
-        public readonly documentData: RxDocumentTypeWithRev<DocType>,
+        public readonly documentData: RxDocumentTypeWithRev<DocType> | null,
         public readonly databaseToken: string,
         public readonly collectionName: string,
         public readonly isLocal: boolean,
@@ -82,14 +82,14 @@ export class RxChangeEvent<DocType = any> {
                 return {
                     operation: this.operation,
                     id: this.documentId,
-                    doc: this.documentData,
+                    doc: this.documentData as any,
                     previous: null
                 };
             case 'UPDATE':
                 return {
                     operation: this.operation,
                     id: this.documentId,
-                    doc: this.documentData,
+                    doc: this.documentData as any,
                     previous: this.previousData ? this.previousData : 'UNKNOWN'
                 };
             case 'DELETE':
@@ -152,7 +152,8 @@ export function changeEventFromStorageStream<DocType>(
 export function changeEventfromPouchChange<DocType>(
     changeDoc: any,
     collection: RxCollection,
-    time: number // time when the event was streamed out of pouchdb
+    startTime: number, // time when the event was streamed out of pouchdb
+    endTime: number, // time when the event was streamed out of pouchdb
 ): RxChangeEvent<DocType> {
     console.log('!!changeEventfromPouchChange()');
     let operation: WriteOperation = changeDoc._rev.startsWith('1-') ? 'INSERT' : 'UPDATE';
@@ -177,8 +178,8 @@ export function changeEventfromPouchChange<DocType>(
         collection.database.token,
         collection.name,
         false,
-        time,
-        time,
+        startTime,
+        endTime,
         previous
     );
     return cE;

@@ -33,7 +33,7 @@ export class RxStoragePouchDbClass implements RxStorage<PouchDBInstance> {
     }> = new WeakMap();
 
     constructor(
-        public adapter: any, // TODO are there types for pouchdb adapters?
+        public adapter: any,
         public pouchSettings: PouchSettings = {}
     ) { }
 
@@ -232,14 +232,16 @@ export class RxStoragePouchDbClass implements RxStorage<PouchDBInstance> {
         }
 
         // strip empty selectors
-        // TODO this has shit performance because of that many filters, use a single one!
-        Object
-            .entries(query.selector)
-            .filter(([, v]) => (typeof v === 'object'))
-            .filter(([, v]) => v !== null)
-            .filter(([, v]) => !Array.isArray(v))
-            .filter(([, v]) => Object.keys((v as any)).length === 0)
-            .forEach(([k]) => delete query.selector[k]);
+        Object.entries(query.selector).forEach(([k, v]) => {
+            if (
+                typeof v === 'object' &&
+                v !== null &&
+                !Array.isArray(v) &&
+                Object.keys((v as any)).length === 0
+            ) {
+                delete query.selector[k];
+            }
+        });
 
         // primary swap
         if (
