@@ -22,7 +22,6 @@ import {
 import { newRxError } from './rx-error';
 import { Observable, Subject } from 'rxjs';
 import { shareReplay } from 'rxjs/operators';
-import { wait } from 'async-test-util';
 
 export class RxStoragePouchDbClass implements RxStorage<PouchDBInstance> {
     public name: string = 'pouchdb';
@@ -67,6 +66,7 @@ export class RxStoragePouchDbClass implements RxStorage<PouchDBInstance> {
                 },
                 inMemoryFields
             );
+
             if (sortedRows[0].doc._id === rows[0].doc._id) {
                 return -1;
             } else {
@@ -283,7 +283,6 @@ export class RxStoragePouchDbClass implements RxStorage<PouchDBInstance> {
                 options?: any,
                 callback?: Function
             ) {
-
                 // we need to await 2 ticks here,
                 // to prevent a race condition when write+read occurs at the same time
                 await nextTick();
@@ -331,8 +330,10 @@ export class RxStoragePouchDbClass implements RxStorage<PouchDBInstance> {
                 console.log('------------------');*/
 
                 // if no new edit is used, we need the previous last winning rev of each document
+                // TODO this could be made faster because rxdb already knows some previous values
+                // but does not inject them into the call to bulkDocs()
                 const previousDocsById = new Map();
-                if (noNewEdit) {
+                if (!(docs.length === 1 && docs[0]._id.startsWith('_design/'))) { // performance shortcut
                     const previousDocs = await this.allDocs({
                         keys: docs.map(doc => doc._id),
                         include_docs: true
@@ -364,7 +365,6 @@ export class RxStoragePouchDbClass implements RxStorage<PouchDBInstance> {
                     }
                 }
 
-
                 if (noNewEdit) {
                     docs.forEach(doc => {
                         const id = doc._id;
@@ -384,8 +384,6 @@ export class RxStoragePouchDbClass implements RxStorage<PouchDBInstance> {
                         ) {
                             isNewRevisionHighter = true;
                         }
-
-                        console.log('isNewRevisionHighter: ' + isNewRevisionHighter);
 
                         if (!isNewRevisionHighter) {
                             return;
@@ -441,12 +439,15 @@ export class RxStoragePouchDbClass implements RxStorage<PouchDBInstance> {
                         }
 
                         if (!res.ok) { return; }
-                        const before = inputDocsById.get(id);
-                        const after = Object.assign({}, before);
+                        const before = previousDocsById.get(id);
+                        const after = inputDocsById.get(id);
                         after._rev = res.rev;
 
                         let event: ChangeEvent<any>;
                         if (after._rev.startsWith('1-')) {
+                            if (after._deleted) {
+                                return;
+                            }
                             event = {
                                 id,
                                 operation: 'INSERT',

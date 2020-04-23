@@ -464,7 +464,9 @@ function __ensureEqual(rxQuery: RxQueryBase): Promise<boolean> | boolean {
 
     let ret = false;
     let mustReExec = false; // if this becomes true, a whole execution over the database is made
-    if (rxQuery._latestChangeEvent === -1) mustReExec = true; // have not executed yet -> must run
+    if (rxQuery._latestChangeEvent === -1 || !rxQuery.collection.database.eventReduce) {
+        mustReExec = true; // have not executed yet -> must run
+    }
 
     /**
      * try to use the queryChangeDetector to calculate the new results
@@ -479,28 +481,34 @@ function __ensureEqual(rxQuery: RxQueryBase): Promise<boolean> | boolean {
 
             /**
              * because pouchdb prefers writes over reads,
-             * we have to filter out the events that happend before the read has started
+             * we have to filter out the events that happend before the read was done
              * so that we do not fill event-reduce with the wrong data
              */
             missedChangeEvents = missedChangeEvents.filter((cE: RxChangeEvent) => {
-                return !cE.startTime || cE.startTime > rxQuery._lastExecStart;
+                return !cE.endTime || cE.endTime > rxQuery._lastExecEnd;
             });
-
-
 
             const runChangeEvents: RxChangeEvent[] = (rxQuery as any).collection._changeEventBuffer.reduceByLastOfDoc(missedChangeEvents);
 
             /*
-            console.log('calculateNewResults() ' + new Date().getTime());
+            console.log('_:'.repeat(40));
+            console.log('calculateNewResults() ' + new Date().getTime() + '   ........    ' + rxQuery.collection.database.eventReduce);
+            console.dir(rxQuery.mangoQuery);
             console.log(rxQuery._lastExecStart + ' - ' + rxQuery._lastExecEnd);
             console.dir(rxQuery._resultsData.slice());
-            console.dir(runChangeEvents);
-            */
+            console.dir(runChangeEvents); */
 
             const eventReduceResult = calculateNewResults(
                 rxQuery as any,
                 runChangeEvents
             );
+
+            /*
+            console.log('eventReduceResult: ');
+            console.dir(eventReduceResult);
+            console.log('_-'.repeat(40));
+            */
+
             if (eventReduceResult.runFullQueryAgain) {
                 // could not calculate the new results, execute must be done
                 mustReExec = true;

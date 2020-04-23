@@ -224,25 +224,25 @@ config.parallel('rx-storage-pouchdb.test.js', () => {
             console.log('putRes:');
             console.dir(putRes);
 
-            const updateRes = await instance2.put({
+            await instance2.put({
                 _id: 'foo',
                 name: 'bar2',
                 _rev: putRes.rev
             });
             await AsyncTestUtil.waitUntil(() => emitted.length === 2);
 
-/*
-            await instance2.remove({
-                _id: 'foo',
-                name: 'bar3',
-                _rev: updateRes.rev
-            });
-            await AsyncTestUtil.waitUntil(() => emitted.length === 3);
+            /*
+                        await instance2.remove({
+                            _id: 'foo',
+                            name: 'bar3',
+                            _rev: updateRes.rev
+                        });
+                        await AsyncTestUtil.waitUntil(() => emitted.length === 3);
 
-            assert.strictEqual(emitted[0].operation, 'INSERT');
-            assert.strictEqual(emitted[1].operation, 'UPDATE');
-            assert.strictEqual(emitted[2].operation, 'DELETE');
-*/
+                        assert.strictEqual(emitted[0].operation, 'INSERT');
+                        assert.strictEqual(emitted[1].operation, 'UPDATE');
+                        assert.strictEqual(emitted[2].operation, 'DELETE');
+            */
 
             console.log('emitted:');
             console.dir(emitted);

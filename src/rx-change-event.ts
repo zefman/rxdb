@@ -11,9 +11,9 @@ import {
 
 import type {
     RxCollection,
-    RxDocument,
     RxDocumentTypeWithRev
 } from './types';
+
 import { now } from './util';
 
 export type RxChangeEventJson<DocType = any> = {
@@ -121,8 +121,12 @@ export function changeEventFromStorageStream<DocType>(
     collection: RxCollection
 ) {
 
-    console.log('changeEventFromStorageStream()');
-    console.dir(change);
+
+    /*
+    TODO remove log
+console.log('changeEventFromStorageStream()');
+console.dir(change);
+*/
 
     const operation = change.operation;
 
@@ -143,8 +147,11 @@ export function changeEventFromStorageStream<DocType>(
         previous
     );
 
-    console.log('changeEventFromStorageStream(): ret');
-    console.dir(ret);
+    /*
+    TODO remove log
+console.log('changeEventFromStorageStream(): ret');
+console.dir(ret);
+*/
 
     return ret;
 }
@@ -155,7 +162,6 @@ export function changeEventfromPouchChange<DocType>(
     startTime: number, // time when the event was streamed out of pouchdb
     endTime: number, // time when the event was streamed out of pouchdb
 ): RxChangeEvent<DocType> {
-    console.log('!!changeEventfromPouchChange()');
     let operation: WriteOperation = changeDoc._rev.startsWith('1-') ? 'INSERT' : 'UPDATE';
     if (changeDoc._deleted) {
         operation = 'DELETE';

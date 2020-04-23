@@ -485,10 +485,6 @@ export function syncGraphQL(
                  */
                 const changeEventsSub = collection.$.subscribe(changeEvent => {
                     if (replicationState.isStopped()) return;
-
-                    console.log('aaaaaaaaaa');
-                    console.dir(changeEvent);
-
                     const rev = changeEvent.operation === 'DELETE' ? changeEvent.previousData._rev : changeEvent.documentData._rev;
                     if (
                         rev &&

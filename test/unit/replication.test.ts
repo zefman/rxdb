@@ -158,8 +158,11 @@ describe('replication.test.js', () => {
     describe('sync-directions', () => {
         describe('positive', () => {
             it('push-only-sync', async () => {
-                const c = await humansCollection.create(10, undefined, false);
-                const c2 = await humansCollection.create(10, undefined, false);
+                const docsPerCollection = 5;
+
+                const c = await humansCollection.create(docsPerCollection, undefined, false);
+                const c2 = await humansCollection.create(docsPerCollection, undefined, false);
+
                 c.sync({
                     remote: c2,
                     waitForLeadership: false,
@@ -168,13 +171,20 @@ describe('replication.test.js', () => {
                         push: true
                     }
                 });
+
                 await AsyncTestUtil.waitUntil(async () => {
                     const docs = await c2.find().exec();
-                    return docs.length === 20;
+                    return docs.length === (docsPerCollection * 2);
                 });
-                await AsyncTestUtil.wait(10);
+
+                await AsyncTestUtil.wait(100);
+
+                // because it is a push-only sync, the other collection should not be modified
                 const nonSyncedDocs = await c.find().exec();
-                assert.strictEqual(nonSyncedDocs.length, 10);
+                assert.strictEqual(nonSyncedDocs.length, docsPerCollection);
+
+                const docsAfterSleep = await c2.find().exec();
+                assert.strictEqual(docsAfterSleep.length, (docsPerCollection * 2));
 
                 await c.database.destroy();
                 await c2.database.destroy();
@@ -194,7 +204,7 @@ describe('replication.test.js', () => {
                     const docs = await c.find().exec();
                     return docs.length === 20;
                 });
-                await promiseWait(10);
+                await AsyncTestUtil.wait(10);
                 const nonSyncedDocs = await c2.find().exec();
                 assert.strictEqual(nonSyncedDocs.length, 10);
 

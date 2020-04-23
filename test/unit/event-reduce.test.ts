@@ -1,4 +1,5 @@
 import assert from 'assert';
+import deepEqual from 'deep-equal';
 import { clone } from 'async-test-util';
 
 import * as schemas from '../helper/schemas';
@@ -28,10 +29,15 @@ describe('event-reduce.test.js', () => {
         return collection;
     }
     function ensureResultsEqual(res1: RxDocument[], res2: RxDocument[]) {
-        assert.deepStrictEqual(
-            res1.map(d => d.primary),
-            res2.map(d => d.primary)
-        );
+        const ids1 = res1.map(d => d.primary);
+        const ids2 = res2.map(d => d.primary);
+        if (!deepEqual(ids1, ids2)) {
+            console.error('result ids not equal');
+            console.dir(ids1);
+            console.dir(ids2);
+            throw new Error('not equal');
+        }
+
         assert.deepStrictEqual(
             res1.map(d => d.toJSON()),
             res2.map(d => d.toJSON())
@@ -77,8 +83,9 @@ describe('event-reduce.test.js', () => {
         await testQueries();
 
         // add some
+        console.log('::::::::::: add some');
         await Promise.all(
-            new Array(10)
+            new Array(5)
                 .fill(0)
                 .map(async () => {
                     const doc = schemaObjects.human();
@@ -90,6 +97,7 @@ describe('event-reduce.test.js', () => {
         await testQueries();
 
         // update one
+        console.log('::::::::::: update one');
         await Promise.all(
             [
                 colNoEventReduce,
@@ -106,6 +114,7 @@ describe('event-reduce.test.js', () => {
         await testQueries();
 
         // remove one
+        console.log('::::::::::: remove one');
         await Promise.all(
             [
                 colNoEventReduce,
@@ -122,6 +131,7 @@ describe('event-reduce.test.js', () => {
         await testQueries();
 
         // remove another one
+        console.log('::::::::::: remove another one');
         await Promise.all(
             [
                 colNoEventReduce,

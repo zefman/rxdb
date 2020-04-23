@@ -217,8 +217,8 @@ export class RxCollectionBase<
             )
             .subscribe(
                 cE => {
-                    console.log('got event:');
-                    console.dir(cE);
+                    // console.log('got event:');
+                    // console.dir(cE);
                     this.database.$emit(cE);
                 }
             );

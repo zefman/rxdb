@@ -75,8 +75,6 @@ export const basePrototype = {
             return;
 
         // ensure that new _rev is higher then current
-        console.log('aaa');
-        console.dir(changeEvent);
         const newRevNr = changeEvent.operation === 'DELETE'
             ? getHeightOfRevision(changeEvent.previousData._rev)
             : getHeightOfRevision(changeEvent.documentData._rev);

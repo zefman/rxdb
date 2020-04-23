@@ -25,7 +25,13 @@ export function getSortFieldsOfQuery<RxDocType>(
     if (!query.sort || query.sort.length === 0) {
         return [primaryKey];
     } else {
-        return query.sort.map(part => Object.keys(part)[0]);
+        return query.sort.map(part => {
+            let key = Object.keys(part)[0];
+            if (key === '_id') {
+                key = primaryKey;
+            }
+            return key;
+        });
     }
 }
 
@@ -69,14 +75,23 @@ export function calculateNewResults<RxDocumentType>(
     const previousResultsMap: Map<string, RxDocumentType> = rxQuery._resultsDataMap;
     let changed: boolean = false;
 
+    // console.log('queryParams:');
+    // console.dir(queryParams);
+
     const foundNonOptimizeable = rxChangeEvents.find(cE => {
         const eventReduceEvent = cE.toEventReduceChangeEvent();
-        const actionName: ActionName = calculateActionName({
+        const input = {
             queryParams,
             changeEvent: eventReduceEvent,
             previousResults,
             keyDocumentMap: previousResultsMap
-        });
+        };
+        const actionName: ActionName = calculateActionName(input);
+
+        // console.log('actionName: ' + actionName);
+        // const stateSet = getStateSet(input);
+        // logStateSet(stateSet);
+
         if (actionName === 'runFullQueryAgain') {
             return true;
         } else if (actionName !== 'doNothing') {
