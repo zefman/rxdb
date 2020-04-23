@@ -28,7 +28,9 @@ import type {
     RxCollection,
     RxDatabase,
     RxDocument,
-    RxPlugin
+    RxPlugin,
+    PouchDBInstance,
+    PouchDbBulkDocsRetItem
 } from '../types';
 
 import {
@@ -195,30 +197,20 @@ const RxLocalDocumentPrototype: any = {
         return this;
     },
     _saveData(this: any, newData: any) {
-        const oldData = this._dataSync$.getValue();
         newData = clone(newData);
         newData._id = LOCAL_PREFIX + this.id;
 
-        const startTime = now();
-        return this.parentPouch.put(newData)
-            .then((res: any) => {
-                const endTime = now();
-                newData._rev = res.rev;
-                this._dataSync$.next(newData);
-
-                const changeEvent = new RxChangeEvent(
-                    'UPDATE',
-                    this.id,
-                    clone(this._data),
-                    isRxDatabase(this.parent) ? this.parent.token : this.parent.database.token,
-                    isRxCollection(this.parent) ? this.parent.name : null,
-                    true,
-                    startTime,
-                    endTime,
-                    oldData
-                );
-                this.$emit(changeEvent);
-            });
+        const pouch: PouchDBInstance = this.parentPouch;
+        return pouch.bulkDocs({
+            docs: [newData]
+        }).then(ret => {
+            const first: PouchDbBulkDocsRetItem = ret[0];
+            if (!first.ok) {
+                throw new Error('could not insert local document ' + JSON.stringify(first));
+            }
+            newData._rev = first.rev;
+            this._dataSync$.next(newData);
+        });
     },
 
     remove(this: any): Promise<void> {
@@ -309,15 +301,20 @@ function insertLocal(this: any, id: string, data: any): Promise<RxLocalDocument>
             }
 
             // create new one
-            const pouch = _getPouchByParent(this);
+            const pouch: PouchDBInstance = _getPouchByParent(this);
             const saveData = clone(data);
             saveData._id = LOCAL_PREFIX + id;
-
-            return pouch.put(saveData);
-        }).then((res: any) => {
-            data._rev = res.rev;
-            const newDoc = RxLocalDocument.create(id, data, this);
-            return newDoc;
+            return pouch.bulkDocs({
+                docs: [saveData]
+            }).then(ret => {
+                const first: PouchDbBulkDocsRetItem = ret[0];
+                if (!first.ok) {
+                    throw new Error('could not insert local document ' + JSON.stringify(first));
+                }
+                data._rev = first.rev;
+                const newDoc = RxLocalDocument.create(id, data, this);
+                return newDoc;
+            });
         });
 }
 

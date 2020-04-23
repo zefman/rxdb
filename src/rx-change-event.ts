@@ -11,10 +11,12 @@ import {
 
 import type {
     RxCollection,
-    RxDocumentTypeWithRev
+    RxDocumentTypeWithRev,
+    RxDatabase
 } from './types';
 
 import { now } from './util';
+import { RxStorageChangeEvent } from './rx-storate.interface';
 
 export type RxChangeEventJson<DocType = any> = {
     operation: WriteOperation;
@@ -22,7 +24,7 @@ export type RxChangeEventJson<DocType = any> = {
     documentData: RxDocumentTypeWithRev<DocType> | null;
     previousData?: DocType;
     databaseToken: string;
-    collectionName: string;
+    collectionName: string | null;
     isLocal: boolean;
     startTime?: number;
     endTime?: number;
@@ -40,7 +42,7 @@ export class RxChangeEvent<DocType = any> {
         public readonly documentId: string,
         public readonly documentData: RxDocumentTypeWithRev<DocType> | null,
         public readonly databaseToken: string,
-        public readonly collectionName: string,
+        public readonly collectionName: string | null,
         public readonly isLocal: boolean,
         /**
          * timestam on when the operation was triggered
@@ -117,8 +119,9 @@ export interface RxChangeEventDelete<DocType = any> extends RxChangeEvent<DocTyp
 }
 
 export function changeEventFromStorageStream<DocType>(
-    change: ChangeEvent<DocType>,
-    collection: RxCollection
+    change: RxStorageChangeEvent,
+    collection?: RxCollection,
+    database?: RxDatabase
 ) {
 
 
@@ -130,18 +133,26 @@ console.dir(change);
 
     const operation = change.operation;
 
-    const doc: RxDocumentTypeWithRev<DocType> = change.doc ? collection._handleFromPouch(change.doc) : null;
-    const previous: RxDocumentTypeWithRev<DocType> = change.previous ? collection._handleFromPouch(change.previous) : null;
+    let doc: RxDocumentTypeWithRev<DocType> = change.doc && collection ? collection._handleFromPouch(change.doc) : null;
+    let previous: RxDocumentTypeWithRev<DocType> = change.previous && collection ? collection._handleFromPouch(change.previous) : null;
+
+    if (!collection) {
+        doc = change.doc as any;
+        previous = change.previous as any;
+    }
 
     const documentId = change.id;
+
+    const db = !!collection ? collection.database : database;
+    const collectName = !!collection ? collection.name : null;
 
     const ret = new RxChangeEvent<DocType>(
         operation,
         documentId,
         doc,
-        collection.database.token,
-        collection.name,
-        false,
+        (db as RxDatabase).token,
+        collectName,
+        change.isLocal,
         now(),
         now(),
         previous

@@ -3,7 +3,7 @@ import {
     massageSelector
 } from 'pouchdb-selector-core';
 
-import { RxStorage, PreparedQuery } from './rx-storate.interface';
+import { RxStorage, PreparedQuery, RxStorageChangeEvent } from './rx-storate.interface';
 import type {
     MangoQuery,
     MangoQuerySortPart,
@@ -13,7 +13,7 @@ import type {
     MangoQuerySortDirection
 } from './types';
 import { CompareFunction } from 'array-push-at-sort-position';
-import { flatClone, adapterObject, getHeightOfRevision, nextTick } from './util';
+import { flatClone, adapterObject, getHeightOfRevision, nextTick, LOCAL_PREFIX } from './util';
 import { SortComparator, QueryMatcher, ChangeEvent } from 'event-reduce-js';
 import { runPluginHooks } from './hooks';
 import {
@@ -267,7 +267,7 @@ export class RxStoragePouchDbClass implements RxStorage<PouchDBInstance> {
     getEvents(
         instance: PouchDBInstance,
         primaryKey: string
-    ): Observable<ChangeEvent<any>> {
+    ): Observable<RxStorageChangeEvent> {
         if (!this.eventStreamCache.has(instance)) {
             const subject: Subject<ChangeEvent<any>> = new Subject();
             const oldBulkDocs = instance.bulkDocs.bind(instance);
@@ -373,8 +373,10 @@ export class RxStoragePouchDbClass implements RxStorage<PouchDBInstance> {
                             return;
                         }
 
+                        const isLocal = id.startsWith(LOCAL_PREFIX);
+
                         const prevDoc = previousDocsById.get(id);
-                        let event: ChangeEvent<any>;
+                        let event: RxStorageChangeEvent;
 
                         let isNewRevisionHighter = false;
                         if (
@@ -394,34 +396,38 @@ export class RxStoragePouchDbClass implements RxStorage<PouchDBInstance> {
                                 return;
                             }
                             event = {
-                                id,
+                                id: removeLocalFlat(id),
                                 operation: 'INSERT',
                                 doc: cleanDoc(doc),
-                                previous: null
+                                previous: null,
+                                isLocal
                             };
                         } else if (
                             doc._deleted
                         ) {
                             event = {
-                                id,
+                                id: removeLocalFlat(id),
                                 operation: 'DELETE',
                                 doc: null,
-                                previous: cleanDoc(doc)
+                                previous: cleanDoc(doc),
+                                isLocal
                             };
                         } else {
                             if (prevDoc._deleted) {
                                 event = {
-                                    id,
+                                    id: removeLocalFlat(id),
                                     operation: 'INSERT',
                                     doc: cleanDoc(doc),
-                                    previous: null
+                                    previous: null,
+                                    isLocal
                                 };
                             } else {
                                 event = {
-                                    id,
+                                    id: removeLocalFlat(id),
                                     operation: 'UPDATE',
                                     doc: cleanDoc(doc),
-                                    previous: cleanDoc(prevDoc)
+                                    previous: cleanDoc(prevDoc),
+                                    isLocal
                                 };
                             }
                         }
@@ -439,34 +445,40 @@ export class RxStoragePouchDbClass implements RxStorage<PouchDBInstance> {
                         }
 
                         if (!res.ok) { return; }
+
+                        const isLocal = id.startsWith(LOCAL_PREFIX);
                         const before = previousDocsById.get(id);
                         const after = inputDocsById.get(id);
                         after._rev = res.rev;
 
-                        let event: ChangeEvent<any>;
+                        let event: RxStorageChangeEvent;
                         if (after._rev.startsWith('1-')) {
                             if (after._deleted) {
                                 return;
                             }
                             event = {
-                                id,
+                                id: removeLocalFlat(id),
                                 operation: 'INSERT',
                                 doc: cleanDoc(after),
-                                previous: null
+                                previous: null,
+                                isLocal
                             };
                         } else if (after._deleted) {
                             event = {
-                                id,
+                                id: removeLocalFlat(id),
                                 operation: 'DELETE',
                                 doc: null,
-                                previous: cleanDoc(before)
+                                previous: cleanDoc(before),
+                                isLocal
+
                             };
                         } else {
                             event = {
-                                id,
+                                id: removeLocalFlat(id),
                                 operation: 'UPDATE',
                                 doc: cleanDoc(after),
-                                previous: cleanDoc(before)
+                                previous: cleanDoc(before),
+                                isLocal
                             };
                         }
                         subject.next(event);
@@ -499,13 +511,27 @@ export class RxStoragePouchDbClass implements RxStorage<PouchDBInstance> {
     }
 }
 
+export function removeLocalFlat(id: string): string {
+    const split = id.split('/');
+    if (split.length > 1 && (split[0] + '/') === LOCAL_PREFIX) {
+        split.shift();
+        return split.join('/');
+    } else {
+        return id;
+    }
+}
+
 export function cleanDoc<T>(doc: T): T {
+    if (!doc) {
+        return doc;
+    }
     const cloned: any = Object.assign({}, doc);
     delete cloned._revisions;
-
     if (!cloned._deleted) {
         delete cloned._deleted;
     }
+
+    cloned._id = removeLocalFlat(cloned._id);
 
     return cloned;
 }

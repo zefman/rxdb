@@ -30,7 +30,8 @@ import {
 } from './rx-schema';
 import {
     isInstanceOf as isInstanceOfRxChangeEvent,
-    RxChangeEventBroadcastChannelData
+    RxChangeEventBroadcastChannelData,
+    changeEventFromStorageStream
 } from './rx-change-event';
 import { overwritable } from './overwritable';
 import {
@@ -42,7 +43,7 @@ import {
     Observable
 } from 'rxjs';
 import {
-    filter
+    filter, map
 } from 'rxjs/operators';
 
 import {
@@ -56,7 +57,7 @@ import {
 import {
     RxChangeEvent
 } from './rx-change-event';
-import { RxStorage } from './rx-storate.interface';
+import type { RxStorage, RxStorageChangeEvent } from './rx-storate.interface';
 import { getRxStoragePouchDb } from './rx-storage-pouchdb';
 import { getAllDocuments, deleteStorageInstance } from './rx-database-internal-store';
 
@@ -486,8 +487,9 @@ export function writeToSocket(
         return rxDatabase.broadcastChannel
             .postMessage(sendOverChannel)
             .then(() => true);
-    } else
+    } else {
         return Promise.resolve(false);
+    }
 }
 
 /**
@@ -572,6 +574,22 @@ function prepare(rxDatabase: RxDatabase<any>): Promise<void> {
         })
         .then((storageToken: string) => {
             rxDatabase.storageToken = storageToken;
+            rxDatabase._subs.push(
+                rxDatabase.storage.getEvents(
+                    rxDatabase.internalStore,
+                    '_id'
+                ).pipe(
+                    map((change: RxStorageChangeEvent) => {
+                        return changeEventFromStorageStream(
+                            change,
+                            undefined,
+                            rxDatabase
+                        );
+                    })
+                ).subscribe((cE: RxChangeEvent) => {
+                    rxDatabase.$emit(cE);
+                })
+            );
             if (rxDatabase.multiInstance) {
                 _prepareBroadcastChannel(rxDatabase);
             }

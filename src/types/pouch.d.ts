@@ -54,6 +54,11 @@ declare type Debug = {
 };
 
 export type PouchDbSorting = (string | string[] | { [k: string]: 'asc' | 'desc' | 1 | -1 })[];
+export type PouchDbBulkDocsRetItem = {
+    ok: boolean;
+    id: string;
+    rev: string;
+};
 
 // this is not equal to the standard MangoQuery
 // because of different sorting
@@ -80,11 +85,7 @@ export declare class PouchDBInstance {
     bulkDocs(
         docs: { docs: any[] } | any[],
         options?: any
-    ): Promise<{
-        ok: boolean;
-        id: string;
-        rev: string;
-    }[]>;
+    ): Promise<PouchDbBulkDocsRetItem[]>;
 
     find(mangoQuery: PouchdbQuery): Promise<{
         docs: any[]
@@ -100,11 +101,7 @@ export declare class PouchDBInstance {
     put(
         doc: any,
         options?: any,
-    ): Promise<{
-        ok: boolean;
-        id: string;
-        rev: string;
-    }>;
+    ): Promise<PouchDbBulkDocsRetItem>;
     remove(
         doc: any | string,
         options?: any,

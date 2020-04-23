@@ -11,6 +11,9 @@ import { Observable } from 'rxjs';
 
 
 export type PreparedQuery<DocType> = MangoQuery<DocType> | any;
+export type RxStorageChangeEvent = ChangeEvent<any> & {
+    isLocal: boolean;
+};
 
 /**
  * TODO WORK IN PROGRESS!
@@ -89,6 +92,5 @@ export interface RxStorage<RxStorageInstance = any> {
     getEvents(
         instance: RxStorageInstance,
         primaryKey: string
-    ): Observable<ChangeEvent<any>>;
-
+    ): Observable<RxStorageChangeEvent>;
 }

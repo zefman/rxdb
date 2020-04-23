@@ -217,21 +217,10 @@ export class RxCollectionBase<
             )
             .subscribe(
                 cE => {
-                    // console.log('got event:');
-                    // console.dir(cE);
                     this.database.$emit(cE);
                 }
             );
         this._subs.push(eventStreamSub);
-
-        /*         this._observable$ = this.database.storage
-                    .getEvents(this.pouch, this.schema.primaryPath)
-                    .pipe(
-                        map(cE => changeEventFromStorageStream(cE, this as any)),
-                        tap(cE => this.database.$emit(cE))
-                    );*/
-
-
 
         this._changeEventBuffer = createChangeEventBuffer(this.asRxCollection);
 

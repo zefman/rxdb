@@ -194,6 +194,8 @@ config.parallel('local-documents.test.js', () => {
             const doc2 = await db2.getLocal('foobar');
             assert.ok(doc2);
 
+            await AsyncTestUtil.wait(50);
+
             await doc1.atomicSet('foo', 'bar2');
             await AsyncTestUtil.waitUntil(() => doc2.get('foo') === 'bar2');
 
@@ -231,7 +233,6 @@ config.parallel('local-documents.test.js', () => {
             db2.destroy();
         });
         it('should not conflict with non-local-doc that has same id', async () => {
-            return; // TODO
             const name = randomCouchString(10);
             const db = await createRxDatabase({
                 name,
